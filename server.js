@@ -28,7 +28,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
   origin: isLocalMode
     ? true  // Allow all origins in local mode
-    : ['https://linkup-event.com', 'capacitor://localhost', 'ionic://localhost', 'http://localhost:*'],
+    : ['https://splitx.suntzutechnologies.com', 'https://linkup-event.com', 'capacitor://localhost', 'ionic://localhost', 'http://localhost:*'],
   credentials: true
 }));
 app.use(express.json());
