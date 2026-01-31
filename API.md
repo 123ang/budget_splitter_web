@@ -1,90 +1,185 @@
 # Budget Splitter API Reference
 
-For the **iOS app** (and other clients) calling the **VPS** deployment at **https://splitx.suntzutechnologies.com**.
+Server deployed at **https://splitx.suntzutechnologies.com** (port 3012).
+
+Two modes: **Local** (SQLite, no auth) and **VPS** (PostgreSQL, JWT auth).
 
 ---
 
 ## Base URL & Auth
 
 | Item | Value |
-|------|--------|
+|------|-------|
 | **Base URL** | `https://splitx.suntzutechnologies.com` |
-| **Auth** | JWT in header: `Authorization: Bearer <token>` |
+| **Auth (VPS)** | JWT in header: `Authorization: Bearer <token>` |
+| **Auth (Local)** | None |
 | **Content-Type** | `application/json` for request bodies |
 
-### How iOS calls the API
+---
 
-1. **Register or login** → get `token` from the response.
-2. **Store the token** (e.g. Keychain or UserDefaults).
-3. **For every protected request**, add the header:
-   ```http
-   Authorization: Bearer <your-token>
-   ```
-4. **If you get 401/403** → token expired or invalid → redirect to login and get a new token.
+## Server Modes
 
-Example in Swift (URLSession):
+| Mode | Storage | Auth | Endpoints |
+|------|---------|------|-----------|
+| **Local** | SQLite | None | `/api/members`, `/api/expenses`, `/api/summary` |
+| **VPS** | PostgreSQL | JWT required | Auth + Groups + Expenses |
 
-```swift
-var request = URLRequest(url: URL(string: "https://splitx.suntzutechnologies.com/auth/me")!)
-request.httpMethod = "GET"
-request.setValue("Bearer \(savedToken)", forHTTPHeaderField: "Authorization")
-request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-// then use URLSession.shared.dataTask(with: request) ...
-```
+---
 
-For POST/PATCH with body:
+## Common Endpoint
 
-```swift
-request.httpMethod = "POST"
-request.setValue("Bearer \(savedToken)", forHTTPHeaderField: "Authorization")
-request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-request.httpBody = try? JSONEncoder().encode(yourBody)
+### GET `/health`
+**Auth:** None
+
+**Response (200):**
+```json
+{
+  "status": "ok",
+  "mode": "vps",
+  "port": 3012,
+  "timestamp": "2025-01-31T12:00:00.000Z"
+}
 ```
 
 ---
 
-## Endpoints
+# Local Mode (MODE=local)
 
-### Auth (no token required)
+No authentication. Single group, SQLite storage.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/auth/register` | Register a new user → returns `user` + `token` |
-| POST | `/auth/login` | Login → returns `user` + `token` |
+## Members
 
-### Auth (token required)
+### GET `/api/members`
+List all members.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/auth/me` | Get current user |
-| POST | `/auth/logout` | Invalidate current token |
+**Response (200):**
+```json
+{
+  "members": [
+    { "id": "uuid", "name": "John", "createdAt": "2025-01-01T00:00:00.000Z" }
+  ]
+}
+```
 
-### Groups & data (all require token)
+### POST `/api/members`
+Add a member.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/groups` | List groups owned by the user |
-| GET | `/api/groups/:groupId/members` | List members in a group |
-| GET | `/api/groups/:groupId/expenses` | List expenses for a group |
-| POST | `/api/expenses` | Add an expense (body: groupId, amount, splits, etc.) |
-| DELETE | `/api/expenses/:expenseId` | Soft-delete an expense |
-| PATCH | `/api/expense-splits/:splitId/payment` | Mark a split as paid/unpaid |
-| GET | `/api/expense-splits/:splitId/history` | Payment history for a split |
+**Request:**
+```json
+{ "name": "John" }
+```
 
-### Other
+**Response (201):**
+```json
+{
+  "member": { "id": "uuid", "name": "John", "createdAt": "2025-01-01T00:00:00.000Z" }
+}
+```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Health check (no auth); returns `{ "status": "ok", "mode": "vps" }` |
+**Errors:** 400 (name required), 500.
+
+### DELETE `/api/members/:id`
+Remove a member.
+
+**Response (200):** `{ "success": true }`  
+**Errors:** 404, 500.
+
+### POST `/api/members/reset`
+Reset all members and expenses to defaults.
+
+**Response (200):** `{ "success": true, "message": "Reset complete" }`
 
 ---
 
-## Request / Response Details
+## Expenses (Local)
+
+### GET `/api/expenses`
+List all expenses.
+
+**Response (200):**
+```json
+{
+  "expenses": [
+    {
+      "id": "uuid",
+      "description": "Dinner",
+      "amount": 5000,
+      "currency": "JPY",
+      "category": "Meal",
+      "paidByMemberId": "uuid",
+      "expenseDate": "2025-01-15",
+      "createdAt": "2025-01-15T12:00:00.000Z",
+      "splits": [
+        { "id": "uuid", "memberId": "uuid", "amount": 2500 }
+      ]
+    }
+  ]
+}
+```
+
+### POST `/api/expenses`
+Add an expense.
+
+**Request:**
+```json
+{
+  "description": "Lunch",
+  "amount": 3000,
+  "currency": "JPY",
+  "category": "Meal",
+  "paidByMemberId": "uuid",
+  "expenseDate": "2025-01-20",
+  "splits": [
+    { "memberId": "uuid", "amount": 1500 },
+    { "memberId": "uuid", "amount": 1500 }
+  ]
+}
+```
+
+**Response (201):** `{ "success": true, "expenseId": "uuid" }`  
+**Errors:** 400 (invalid data), 500.
+
+### DELETE `/api/expenses/:id`
+Delete an expense.
+
+**Response (200):** `{ "success": true }`  
+**Errors:** 404, 500.
+
+---
+
+## Summary (Local)
+
+### GET `/api/summary`
+Get totals by member and category.
+
+**Response (200):**
+```json
+{
+  "totalSpent": 287450,
+  "memberTotals": [
+    { "memberId": "uuid", "name": "John", "amount": 28745 }
+  ],
+  "categoryTotals": {
+    "Meal": 120800,
+    "Transport": 80500,
+    "Tickets": 52150,
+    "Other": 34000
+  }
+}
+```
+
+---
+
+# VPS Mode (MODE=vps)
+
+JWT authentication required for `/auth/me`, `/auth/logout`, and all `/api/*` endpoints.
+
+## Auth (no token)
 
 ### POST `/auth/register`
+Register a new user.
 
-**Request body:**
-
+**Request:**
 ```json
 {
   "email": "user@example.com",
@@ -93,96 +188,68 @@ request.httpBody = try? JSONEncoder().encode(yourBody)
   "displayName": "John"
 }
 ```
-
-- Either `email` or `phone` is required.
-- `password` must be at least 8 characters.
-- `displayName` required, at least 2 characters.
+- Either `email` or `phone` required.
+- `password` min 8 chars.
+- `displayName` min 2 chars.
 
 **Response (201):**
-
 ```json
 {
-  "user": {
-    "id": "uuid",
-    "email": "user@example.com",
-    "phone": null,
-    "displayName": "John"
-  },
+  "user": { "id": "uuid", "email": "user@example.com", "phone": null, "displayName": "John" },
   "token": "eyJhbGciOiJIUzI1NiIs..."
 }
 ```
-
-**Errors:** 400 (validation), 409 (user already exists), 500.
-
----
+**Errors:** 400, 409 (user exists), 500.
 
 ### POST `/auth/login`
+Login.
 
-**Request body:**
-
+**Request:**
 ```json
 {
   "emailOrPhone": "user@example.com",
   "password": "your-password",
-  "deviceId": "optional-device-uuid",
+  "deviceId": "optional",
   "deviceName": "iPhone"
 }
 ```
 
-- `emailOrPhone`: user’s email or phone.
-- `deviceId` / `deviceName`: optional, for multi-device tracking.
-
 **Response (200):**
-
 ```json
 {
-  "user": {
-    "id": "uuid",
-    "email": "user@example.com",
-    "phone": null,
-    "displayName": "John"
-  },
+  "user": { "id": "uuid", "email": "user@example.com", "phone": null, "displayName": "John" },
   "token": "eyJhbGciOiJIUzI1NiIs..."
 }
 ```
-
-**Errors:** 400, 401 (invalid credentials), 403 (account deactivated), 500.
+**Errors:** 400, 401, 403 (deactivated), 500.
 
 ---
+
+## Auth (token required)
 
 ### GET `/auth/me`  
 **Header:** `Authorization: Bearer <token>`
 
 **Response (200):**
-
 ```json
 {
-  "user": {
-    "id": "uuid",
-    "displayName": "John",
-    "email": "user@example.com",
-    "phone": null
-  }
+  "user": { "id": "uuid", "displayName": "John", "email": "user@example.com", "phone": null }
 }
 ```
-
-**Errors:** 401 (no/invalid token).
-
----
 
 ### POST `/auth/logout`  
 **Header:** `Authorization: Bearer <token>`
 
-**Response (200):** `{ "message": "Logged out" }`  
-**Errors:** 401, 500.
+**Response (200):** `{ "message": "Logged out" }`
 
 ---
+
+## Groups & Data (token required)
 
 ### GET `/api/groups`  
 **Header:** `Authorization: Bearer <token>`
 
 **Response (200):**
-
 ```json
 {
   "groups": [
@@ -198,38 +265,23 @@ request.httpBody = try? JSONEncoder().encode(yourBody)
 }
 ```
 
-**Errors:** 401, 500.
-
----
-
 ### GET `/api/groups/:groupId/members`  
 **Header:** `Authorization: Bearer <token>`
 
 **Response (200):**
-
 ```json
 {
   "members": [
-    {
-      "id": "uuid",
-      "groupId": "uuid",
-      "userId": "uuid-or-null",
-      "name": "Alex",
-      "createdAt": "2025-01-01T00:00:00.000Z"
-    }
+    { "id": "uuid", "groupId": "uuid", "userId": null, "name": "Alex", "createdAt": "2025-01-01T00:00:00.000Z" }
   ]
 }
 ```
-
-**Errors:** 401, 403 (not a member), 500.
-
----
+**Errors:** 403 (not a member), 500.
 
 ### GET `/api/groups/:groupId/expenses`  
 **Header:** `Authorization: Bearer <token>`
 
 **Response (200):**
-
 ```json
 {
   "expenses": [
@@ -244,23 +296,17 @@ request.httpBody = try? JSONEncoder().encode(yourBody)
       "expenseDate": "2025-01-15",
       "createdAt": "2025-01-15T12:00:00.000Z",
       "splits": [
-        { "id": "uuid", "memberId": "uuid", "amount": 2500, "isPaid": false },
-        { "id": "uuid", "memberId": "uuid", "amount": 2500, "isPaid": true }
+        { "id": "uuid", "memberId": "uuid", "amount": 2500, "isPaid": false }
       ]
     }
   ]
 }
 ```
 
-**Errors:** 401, 403 (not a member), 500.
-
----
-
 ### POST `/api/expenses`  
 **Header:** `Authorization: Bearer <token>`
 
-**Request body:**
-
+**Request:**
 ```json
 {
   "groupId": "uuid",
@@ -268,7 +314,7 @@ request.httpBody = try? JSONEncoder().encode(yourBody)
   "amount": 3000,
   "currency": "JPY",
   "category": "Meal",
-  "paidByMemberId": "uuid-of-member-who-paid",
+  "paidByMemberId": "uuid",
   "expenseDate": "2025-01-20",
   "splits": [
     { "memberId": "uuid", "amount": 1500 },
@@ -276,65 +322,34 @@ request.httpBody = try? JSONEncoder().encode(yourBody)
   ]
 }
 ```
+- **category:** `Meal`, `Transport`, `Tickets`, `Shopping`, `Hotel`, `Other`
+- **currency:** `JPY`, `MYR`, `SGD`, `USD`
+- **expenseDate:** `YYYY-MM-DD`
 
-- **category** must be one of: `Meal`, `Transport`, `Tickets`, `Shopping`, `Hotel`, `Other`.
-- **currency** optional; default `JPY`. Allowed: `JPY`, `MYR`, `SGD`, `USD`.
-- **expenseDate**: `YYYY-MM-DD`.
-
-**Response (201):**
-
-```json
-{
-  "success": true,
-  "expenseId": "uuid"
-}
-```
-
-**Errors:** 400, 401, 403 (not a member / cannot add expenses), 500.
-
----
+**Response (201):** `{ "success": true, "expenseId": "uuid" }`  
+**Errors:** 400, 403 (not member/cannot add), 500.
 
 ### DELETE `/api/expenses/:expenseId`  
 **Header:** `Authorization: Bearer <token>`
 
 **Response (200):** `{ "success": true }`  
-**Errors:** 401, 403 (no permission), 404, 500.
-
----
+**Errors:** 403, 404, 500.
 
 ### PATCH `/api/expense-splits/:splitId/payment`  
 **Header:** `Authorization: Bearer <token>`
 
-**Request body:**
-
+**Request:**
 ```json
-{
-  "isPaid": true,
-  "reason": "Paid via bank transfer"
-}
+{ "isPaid": true, "reason": "Paid via bank" }
 ```
 
-- `isPaid`: `true` = mark as paid, `false` = mark as unpaid.
-- `reason`: optional.
-
-**Response (200):**
-
-```json
-{
-  "success": true,
-  "message": "Marked paid"
-}
-```
-
-**Errors:** 401, 403 (no permission), 404, 500.
-
----
+**Response (200):** `{ "success": true, "message": "Marked paid" }`  
+**Errors:** 403, 404, 500.
 
 ### GET `/api/expense-splits/:splitId/history`  
 **Header:** `Authorization: Bearer <token>`
 
 **Response (200):**
-
 ```json
 {
   "history": [
@@ -351,15 +366,34 @@ request.httpBody = try? JSONEncoder().encode(yourBody)
 }
 ```
 
-**Errors:** 401, 500.
+---
+
+## Quick Reference
+
+| Mode | Endpoint | Auth |
+|------|----------|------|
+| Both | `GET /health` | No |
+| Local | `GET/POST/DELETE /api/members` | No |
+| Local | `POST /api/members/reset` | No |
+| Local | `GET/POST/DELETE /api/expenses` | No |
+| Local | `GET /api/summary` | No |
+| VPS | `POST /auth/register`, `POST /auth/login` | No |
+| VPS | `GET /auth/me`, `POST /auth/logout` | Bearer |
+| VPS | `GET /api/groups`, `GET /api/groups/:id/members`, `GET /api/groups/:id/expenses` | Bearer |
+| VPS | `POST/DELETE /api/expenses`, `PATCH /api/expense-splits/:id/payment`, `GET /api/expense-splits/:id/history` | Bearer |
 
 ---
 
-## Quick reference: iOS flow
+## iOS Integration
 
-1. **Base URL:** `https://splitx.suntzutechnologies.com`
-2. **Login/Register** → save `token`.
-3. **All `/auth/*` (except register/login) and `/api/*`** → send header:  
-   `Authorization: Bearer <token>`
-4. **JSON:** set `Content-Type: application/json` and send request body as JSON where required.
-5. **Errors:** check HTTP status and response body `{ "error": "message" }`; on 401/403, re-login and retry with a new token.
+**Base URL:** `https://splitx.suntzutechnologies.com`
+
+1. Register or login → save `token`.
+2. All protected requests: `Authorization: Bearer <token>`
+3. Set `Content-Type: application/json` for POST/PATCH.
+4. On 401/403 → re-login and retry with new token.
+
+```swift
+request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+```
