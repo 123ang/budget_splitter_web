@@ -17,8 +17,12 @@
       <nav class="nav">
         <a href="#features" data-i18n="nav.features">Features</a>
         <a href="#how-it-works" data-i18n="nav.howItWorks">How it works</a>
+        <a href="#cta" class="btn btn-small" data-i18n="nav.getApp">Get the app</a>
         <div class="lang-dropdown" id="lang-dropdown">
-          <button type="button" class="lang-trigger" id="lang-current" aria-expanded="false" aria-haspopup="listbox" aria-label="Select language">EN</button>
+          <button type="button" class="lang-trigger" id="lang-current" aria-expanded="false" aria-haspopup="listbox" aria-label="Select language">
+            <span class="lang-trigger-text">EN</span>
+            <span class="lang-trigger-icon" aria-hidden="true">▼</span>
+          </button>
           <ul class="lang-list" id="lang-list" role="listbox" aria-label="Language">
             <li role="option" data-lang="en" aria-current="true">English</li>
             <li role="option" data-lang="zh">中文</li>
@@ -26,7 +30,6 @@
             <li role="option" data-lang="ja">日本語</li>
           </ul>
         </div>
-        <a href="#cta" class="btn btn-small" data-i18n="nav.getApp">Get the app</a>
       </nav>
     </div>
   </header>

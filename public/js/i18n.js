@@ -254,7 +254,8 @@ function applyTranslations(lang) {
 function updateLangSwitcher(currentLang) {
   const btn = document.getElementById('lang-current');
   const list = document.getElementById('lang-list');
-  if (btn) btn.textContent = langLabel(currentLang);
+  const textEl = btn?.querySelector('.lang-trigger-text');
+  if (textEl) textEl.textContent = langLabel(currentLang);
   if (list) {
     list.querySelectorAll('[data-lang]').forEach((el) => {
       const l = el.getAttribute('data-lang');
