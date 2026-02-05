@@ -187,6 +187,89 @@ module.exports = function(app) {
     }
   });
 
+  app.post('/api/groups', authenticateToken, async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { name, description } = req.body;
+      const groupName = (name && String(name).trim()) || 'My Trip';
+      const groupDesc = description ? String(description).trim() : null;
+
+      const groupResult = await client.query(
+        `INSERT INTO trip_groups (name, description, owner_id)
+         VALUES ($1, $2, $3)
+         RETURNING id, name, description, owner_id, invite_code, is_active, created_at, updated_at`,
+        [groupName, groupDesc, req.user.id]
+      );
+      const group = groupResult.rows[0];
+
+      await client.query(
+        `INSERT INTO group_members (group_id, user_id, member_name, role)
+         VALUES ($1, $2, $3, 'owner')`,
+        [group.id, req.user.id, req.user.displayName || 'Owner']
+      );
+
+      await client.query('COMMIT');
+      res.status(201).json({
+        group: {
+          id: group.id,
+          name: group.name,
+          description: group.description,
+          owner_id: group.owner_id,
+          invite_code: group.invite_code,
+          is_active: group.is_active
+        }
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('POST /api/groups:', err);
+      res.status(500).json({ error: 'Failed to create group' });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post('/api/groups/:groupId/members', authenticateToken, async (req, res) => {
+    try {
+      const { groupId } = req.params;
+      const { name } = req.body;
+
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({ error: 'Name required' });
+      }
+
+      const memberName = String(name).trim();
+
+      const check = await pool.query(
+        'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
+        [groupId, req.user.id]
+      );
+      if (check.rows.length === 0) {
+        return res.status(403).json({ error: 'Not a member of this group' });
+      }
+
+      const result = await pool.query(
+        `INSERT INTO members (group_id, name)
+         VALUES ($1, $2)
+         RETURNING id, group_id, user_id, name, created_at`,
+        [groupId, memberName]
+      );
+      const row = result.rows[0];
+      res.status(201).json({
+        member: {
+          id: row.id,
+          groupId: row.group_id,
+          userId: row.user_id,
+          name: row.name,
+          createdAt: row.created_at
+        }
+      });
+    } catch (err) {
+      console.error('POST /api/groups/:groupId/members:', err);
+      res.status(500).json({ error: 'Failed to add member' });
+    }
+  });
+
   app.get('/api/groups/:groupId/members', authenticateToken, async (req, res) => {
     try {
       const { groupId } = req.params;

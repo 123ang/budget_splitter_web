@@ -265,6 +265,57 @@ Login.
 }
 ```
 
+### POST `/api/groups`  
+**Header:** `Authorization: Bearer <token>`
+
+**Request:**
+```json
+{
+  "name": "Tokyo Trip",
+  "description": "Optional"
+}
+```
+- **name:** optional; defaults to `"My Trip"` if omitted.
+- **description:** optional.
+
+**Response (201):**
+```json
+{
+  "group": {
+    "id": "uuid",
+    "name": "Tokyo Trip",
+    "description": "Optional",
+    "owner_id": "uuid",
+    "invite_code": null,
+    "is_active": true
+  }
+}
+```
+**Errors:** 500.
+
+### POST `/api/groups/:groupId/members`  
+**Header:** `Authorization: Bearer <token>`
+
+**Request:**
+```json
+{ "name": "Alex" }
+```
+- **name:** required. Display name for the trip member.
+
+**Response (201):**
+```json
+{
+  "member": {
+    "id": "uuid",
+    "groupId": "uuid",
+    "userId": null,
+    "name": "Alex",
+    "createdAt": "2025-01-01T00:00:00.000Z"
+  }
+}
+```
+**Errors:** 400 (name required), 403 (not a member of group), 500.
+
 ### GET `/api/groups/:groupId/members`  
 **Header:** `Authorization: Bearer <token>`
 
