@@ -58,6 +58,17 @@ function uuid() {
 }
 
 module.exports = function(app) {
+  // ==================== DB CHECK ====================
+  app.get('/api/ping', (req, res) => {
+    try {
+      db.prepare('SELECT 1').get();
+      res.json({ db: 'ok', mode: 'local', storage: 'sqlite' });
+    } catch (err) {
+      console.error('DB ping failed:', err);
+      res.status(503).json({ db: 'error', message: err.message });
+    }
+  });
+
   // ==================== MEMBERS ====================
 
   app.get('/api/members', (req, res) => {

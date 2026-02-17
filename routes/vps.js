@@ -57,6 +57,17 @@ const authenticateToken = async (req, res, next) => {
 };
 
 module.exports = function(app) {
+  // ==================== DB CHECK ====================
+  app.get('/api/ping', async (req, res) => {
+    try {
+      await pool.query('SELECT 1');
+      res.json({ db: 'ok', mode: 'vps', storage: 'postgresql' });
+    } catch (err) {
+      console.error('DB ping failed:', err);
+      res.status(503).json({ db: 'error', message: err.message });
+    }
+  });
+
   // ==================== AUTH ROUTES ====================
 
   app.post('/auth/register', async (req, res) => {

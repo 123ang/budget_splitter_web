@@ -41,6 +41,34 @@ Two modes: **Local** (SQLite, no auth) and **VPS** (PostgreSQL, JWT auth).
 }
 ```
 
+Returns server status only (no database check).
+
+---
+
+### GET `/api/ping` — Check DB connection
+**Auth:** None
+
+Use this to verify the API is connected to the database.
+
+**Response when DB is OK (200):**
+```json
+{ "db": "ok", "mode": "local", "storage": "sqlite" }
+```
+or (VPS):
+```json
+{ "db": "ok", "mode": "vps", "storage": "postgresql" }
+```
+
+**Response when DB is down (503):**
+```json
+{ "db": "error", "message": "connection refused..." }
+```
+
+**How to check:**
+- **Browser:** Open `https://your-api-host/api/ping`
+- **curl:** `curl https://splitx.suntzutechnologies.com/api/ping`
+- **Local:** `curl http://localhost:3012/api/ping`
+
 ---
 
 # Local Mode (MODE=local)
